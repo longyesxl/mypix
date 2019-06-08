@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 import tqdm
 from torch.nn import init
+from torch.autograd import Variable
 
 class pix2pix():
     def __init__(self,lr,beta1,model_path,data_path,result_path):
@@ -21,7 +22,8 @@ class pix2pix():
         self.data_path=data_path
         self.net_G=unet.GlobalGenerator(3,3).to(self.device)
         #self.net_G=unet.Unet(3,3,8).to(self.device)
-        self.net_D=net_D.net_D(6).to(self.device)
+        #self.net_D=net_D.net_D(6).to(self.device)
+        self.net_D=net_D.MultiscaleDiscriminator(6, 64, 3, 'instance', False, 1, True)
         self.init_weights()
         if os.path.exists(model_path+"/net_G.pth"):
             self.net_G.load_state_dict(torch.load(model_path+"/net_G.pth"))
@@ -29,10 +31,20 @@ class pix2pix():
             self.net_D.load_state_dict(torch.load(model_path+"/net_D.pth"))
         self.optimizer_G = torch.optim.Adam(self.net_G.parameters(), lr=lr, betas=(beta1, 0.999))
         self.optimizer_D = torch.optim.Adam(self.net_D.parameters(), lr=lr, betas=(beta1, 0.999))
-        self.gan_loss=nn.MSELoss().to(self.device)
+        self.criterionGAN = GANLoss(use_lsgan=not opt.no_lsgan, tensor=self.Tensor) 
         self.l1_loss = nn.L1Loss().to(self.device)
+        self.criterionFeat = torch.nn.L1Loss().to(self.device)
         self.real_label=torch.tensor(1.0)
         self.fake_label=torch.tensor(0.0)
+        self.fake_pool = ImagePool(0)
+        self.criterionVGG = VGGLoss(0).to(self.device)
+    def discriminate(self, input_label, test_image, use_pool=False):
+        input_concat = torch.cat((input_label, test_image.detach()), dim=1)
+        if use_pool:            
+            fake_query = self.fake_pool.query(input_concat)
+            return self.net_D.forward(fake_query)
+        else:
+            return self.net_D.forward(input_concat)
     def init_weights(self, init_type='normal', init_gain=0.02):
         def init_func(m):  # define the initialization function
             classname = m.__class__.__name__
@@ -62,15 +74,11 @@ class pix2pix():
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
-        fake = torch.cat((self.real_in, self.fake_out), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
-        pred_fake = self.net_D(fake.detach())
-        pred_fake=pred_fake[len(pred_fake)-1]
-        self.loss_D_fake = self.gan_loss(pred_fake, self.fake_label.expand_as(pred_fake).to(self.device))
+        pred_fake = self.discriminate(self.real_in, self.fake_out, use_pool=True)
+        self.loss_D_fake = self.criterionGAN(pred_fake, False)   
         # Real
-        real = torch.cat((self.real_in,self.real_out), 1)
-        pred_real = self.net_D(real)
-        pred_real=pred_real[len(pred_real)-1]
-        self.loss_D_real = self.gan_loss(pred_real, self.real_label.expand_as(pred_real).to(self.device))
+        pred_real = self.discriminate(self.real_in, self.real_out)
+        self.loss_D_real = self.criterionGAN(pred_real, True)   
         # combine loss and calculate gradients
         self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
         self.loss_D.backward()
@@ -78,16 +86,19 @@ class pix2pix():
     def backward_G(self):
         """Calculate GAN and L1 loss for the generator"""
         # First, G(A) should fake the discriminator
-        fake = torch.cat((self.real_in, self.fake_out), 1)
-        real = torch.cat((self.real_in,self.real_out), 1)
-        pred_fake = self.net_D(fake)
-        pred_real = self.net_D(real)
+        pred_fake = self.net_D.forward(torch.cat((self.real_in, self.fake_out), dim=1))        
+        self.loss_G_GAN = self.criterionGAN(pred_fake, True) 
+        pred_real = self.discriminate(self.real_in, self.real_out)
+
+        self.loss_G_GAN_Feat = 0
+        feat_weights = 1.0
+        D_weights = 1.0
+        for i in range(1):
+            for j in range(len(pred_fake[i])-1):
+                loss_G_GAN_Feat += D_weights * feat_weights * self.criterionFeat(pred_fake[i][j], pred_real[i][j].detach()) * 10.0
         # Second, G(A) = B
-        self.loss_G_L1 = self.l1_loss(self.fake_out, self.real_out) 
-        # combine loss and calculate gradients
-        self.loss_G = self.loss_G_L1
-        for i in range(len(pred_fake)):
-            self.loss_G+=self.gan_loss(pred_fake[i], pred_real[i])/len(pred_fake)
+        self.loss_G_VGG = self.criterionVGG(self.fake_out, self.real_out) * 10.0
+        self.loss_G=self.loss_G_GAN+self.loss_G_GAN_Feat+self.loss_G_VGG
         self.loss_G.backward()
 
     def train(self,input):
@@ -145,3 +156,119 @@ class pix2pix():
             result=np.concatenate((r_in, r_out,f_out),axis=1)*255
             rz=result.astype(np.uint8)
             cv2.imwrite(self.result_path+"/rz_img/val/"+("%05d" % epoch)+".jpg",rz) 
+class GANLoss(nn.Module):
+    def __init__(self, use_lsgan=True, target_real_label=1.0, target_fake_label=0.0,
+                 tensor=torch.FloatTensor):
+        super(GANLoss, self).__init__()
+        self.real_label = target_real_label
+        self.fake_label = target_fake_label
+        self.real_label_var = None
+        self.fake_label_var = None
+        self.Tensor = tensor
+        if use_lsgan:
+            self.loss = nn.MSELoss()
+        else:
+            self.loss = nn.BCELoss()
+
+    def get_target_tensor(self, input, target_is_real):
+        target_tensor = None
+        if target_is_real:
+            create_label = ((self.real_label_var is None) or
+                            (self.real_label_var.numel() != input.numel()))
+            if create_label:
+                real_tensor = self.Tensor(input.size()).fill_(self.real_label)
+                self.real_label_var = Variable(real_tensor, requires_grad=False)
+            target_tensor = self.real_label_var
+        else:
+            create_label = ((self.fake_label_var is None) or
+                            (self.fake_label_var.numel() != input.numel()))
+            if create_label:
+                fake_tensor = self.Tensor(input.size()).fill_(self.fake_label)
+                self.fake_label_var = Variable(fake_tensor, requires_grad=False)
+            target_tensor = self.fake_label_var
+        return target_tensor
+
+    def __call__(self, input, target_is_real):
+        if isinstance(input[0], list):
+            loss = 0
+            for input_i in input:
+                pred = input_i[-1]
+                target_tensor = self.get_target_tensor(pred, target_is_real)
+                loss += self.loss(pred, target_tensor)
+            return loss
+        else:            
+            target_tensor = self.get_target_tensor(input[-1], target_is_real)
+            return self.loss(input[-1], target_tensor)
+from torchvision import models
+class Vgg19(torch.nn.Module):
+    def __init__(self, requires_grad=False):
+        super(Vgg19, self).__init__()
+        vgg_pretrained_features = models.vgg19(pretrained=True).features
+        self.slice1 = torch.nn.Sequential()
+        self.slice2 = torch.nn.Sequential()
+        self.slice3 = torch.nn.Sequential()
+        self.slice4 = torch.nn.Sequential()
+        self.slice5 = torch.nn.Sequential()
+        for x in range(2):
+            self.slice1.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(2, 7):
+            self.slice2.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(7, 12):
+            self.slice3.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(12, 21):
+            self.slice4.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(21, 30):
+            self.slice5.add_module(str(x), vgg_pretrained_features[x])
+        if not requires_grad:
+            for param in self.parameters():
+                param.requires_grad = False
+
+    def forward(self, X):
+        h_relu1 = self.slice1(X)
+        h_relu2 = self.slice2(h_relu1)        
+        h_relu3 = self.slice3(h_relu2)        
+        h_relu4 = self.slice4(h_relu3)        
+        h_relu5 = self.slice5(h_relu4)                
+        out = [h_relu1, h_relu2, h_relu3, h_relu4, h_relu5]
+        return out
+class VGGLoss(nn.Module):
+    def __init__(self, gpu_ids):
+        super(VGGLoss, self).__init__()        
+        self.vgg = Vgg19().cuda()
+        self.criterion = nn.L1Loss()
+        self.weights = [1.0/32, 1.0/16, 1.0/8, 1.0/4, 1.0]        
+
+    def forward(self, x, y):              
+        x_vgg, y_vgg = self.vgg(x), self.vgg(y)
+        loss = 0
+        for i in range(len(x_vgg)):
+            loss += self.weights[i] * self.criterion(x_vgg[i], y_vgg[i].detach())        
+        return loss
+class ImagePool():
+    def __init__(self, pool_size):
+        self.pool_size = pool_size
+        if self.pool_size > 0:
+            self.num_imgs = 0
+            self.images = []
+
+    def query(self, images):
+        if self.pool_size == 0:
+            return images
+        return_images = []
+        for image in images.data:
+            image = torch.unsqueeze(image, 0)
+            if self.num_imgs < self.pool_size:
+                self.num_imgs = self.num_imgs + 1
+                self.images.append(image)
+                return_images.append(image)
+            else:
+                p = random.uniform(0, 1)
+                if p > 0.5:
+                    random_id = random.randint(0, self.pool_size-1)
+                    tmp = self.images[random_id].clone()
+                    self.images[random_id] = image
+                    return_images.append(tmp)
+                else:
+                    return_images.append(image)
+        return_images = Variable(torch.cat(return_images, 0))
+        return return_images
