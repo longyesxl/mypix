@@ -165,6 +165,7 @@ class GANLoss(nn.Module):
         self.real_label_var = None
         self.fake_label_var = None
         self.Tensor = tensor
+        self.device = torch.device('cuda:0')
         if use_lsgan:
             self.loss = nn.MSELoss().to(self.device)
         else:
@@ -233,9 +234,10 @@ class Vgg19(torch.nn.Module):
         return out
 class VGGLoss(nn.Module):
     def __init__(self, gpu_ids):
-        super(VGGLoss, self).__init__()        
+        super(VGGLoss, self).__init__()       
+        self.device = torch.device('cuda:0') 
         self.vgg = Vgg19().cuda()
-        self.criterion = nn.L1Loss()
+        self.criterion = nn.L1Loss().to(self.device)
         self.weights = [1.0/32, 1.0/16, 1.0/8, 1.0/4, 1.0]        
 
     def forward(self, x, y):              
