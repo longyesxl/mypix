@@ -166,9 +166,9 @@ class GANLoss(nn.Module):
         self.fake_label_var = None
         self.Tensor = tensor
         if use_lsgan:
-            self.loss = nn.MSELoss()
+            self.loss = nn.MSELoss().to(self.device)
         else:
-            self.loss = nn.BCELoss()
+            self.loss = nn.BCELoss().to(self.device)
 
     def get_target_tensor(self, input, target_is_real):
         target_tensor = None
