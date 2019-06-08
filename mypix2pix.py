@@ -23,7 +23,7 @@ class pix2pix():
         self.net_G=unet.GlobalGenerator(3,3).to(self.device)
         #self.net_G=unet.Unet(3,3,8).to(self.device)
         #self.net_D=net_D.net_D(6).to(self.device)
-        self.net_D=net_D.MultiscaleDiscriminator(6, 64, 3, 'instance', False, 1, True)
+        self.net_D=net_D.MultiscaleDiscriminator(6, 64, 3, nn.BatchNorm2d, False, 1, True)
         self.init_weights()
         if os.path.exists(model_path+"/net_G.pth"):
             self.net_G.load_state_dict(torch.load(model_path+"/net_G.pth"))
