@@ -73,7 +73,7 @@ class pix2pix():
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
-        pred_fake = self.discriminate(self.real_in, self.fake_out, use_pool=True)
+        pred_fake = self.discriminate(self.real_in, self.fake_out)
         self.loss_D_fake = self.criterionGAN(pred_fake, False)   
         # Real
         pred_real = self.discriminate(self.real_in, self.real_out)
