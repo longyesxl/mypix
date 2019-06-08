@@ -19,7 +19,7 @@ class pix2pix():
         self.result_path=result_path
         self.model_path=model_path
         self.data_path=data_path
-        self.net_G=GlobalGenerator(3,3).to(self.device)
+        self.net_G=unet.GlobalGenerator(3,3).to(self.device)
         #self.net_G=unet.Unet(3,3,8).to(self.device)
         self.net_D=net_D.net_D(6).to(self.device)
         self.init_weights()
