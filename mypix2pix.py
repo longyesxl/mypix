@@ -95,7 +95,7 @@ class pix2pix():
         D_weights = 1.0
         for i in range(1):
             for j in range(len(pred_fake[i])-1):
-                loss_G_GAN_Feat += D_weights * feat_weights * self.criterionFeat(pred_fake[i][j], pred_real[i][j].detach()) * 10.0
+                self.loss_G_GAN_Feat += D_weights * feat_weights * self.criterionFeat(pred_fake[i][j], pred_real[i][j].detach()) * 10.0
         # Second, G(A) = B
         self.loss_G_VGG = self.criterionVGG(self.fake_out, self.real_out) * 10.0
         self.loss_G=self.loss_G_GAN+self.loss_G_GAN_Feat+self.loss_G_VGG
