@@ -12,7 +12,7 @@ from torch.nn import init
 from torch.autograd import Variable
 
 class pix2pix():
-    def __init__(self,lr,beta1,model_path,data_path,result_path):
+    def __init__(self,lr,beta1,model_path,data_path,result_path,net_G_type="unet"):
         self.device = torch.device('cuda:0')
         self.train_dataset=mydataset.myDataset(data_path)
         # self.test_dataset=mydataset.myDataset(data_path)
@@ -20,8 +20,10 @@ class pix2pix():
         self.result_path=result_path
         self.model_path=model_path
         self.data_path=data_path
-        self.net_G=unet.GlobalGenerator(3,3).to(self.device)
-        #self.net_G=unet.Unet(3,3,8).to(self.device)
+        if(net_G_type=="unet"):
+            self.net_G=unet.Unet(3,3,8).to(self.device)
+        else:
+            self.net_G=unet.GlobalGenerator(3,3).to(self.device)
         #self.net_D=net_D.net_D(6).to(self.device)
         self.net_D=net_D.MultiscaleDiscriminator(6, 64, 3, nn.BatchNorm2d, False, 1, True).to(self.device)
         self.init_weights()
