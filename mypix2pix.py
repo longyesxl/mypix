@@ -31,7 +31,7 @@ class pix2pix():
             self.net_D.load_state_dict(torch.load(model_path+"/net_D.pth"))
         self.optimizer_G = torch.optim.Adam(self.net_G.parameters(), lr=lr, betas=(beta1, 0.999))
         self.optimizer_D = torch.optim.Adam(self.net_D.parameters(), lr=lr, betas=(beta1, 0.999))
-        self.criterionGAN = GANLoss(use_lsgan=True, tensor=self.Tensor) 
+        self.criterionGAN = GANLoss(use_lsgan=True) 
         self.l1_loss = nn.L1Loss().to(self.device)
         self.criterionFeat = torch.nn.L1Loss().to(self.device)
         self.real_label=torch.tensor(1.0)
