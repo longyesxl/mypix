@@ -31,8 +31,7 @@ class pix2pix():
             self.net_D.load_state_dict(torch.load(model_path+"/net_D.pth"))
         self.optimizer_G = torch.optim.Adam(self.net_G.parameters(), lr=lr, betas=(beta1, 0.999))
         self.optimizer_D = torch.optim.Adam(self.net_D.parameters(), lr=lr, betas=(beta1, 0.999))
-        self.criterionGAN = GANLoss(use_lsgan=True) 
-        self.l1_loss = nn.L1Loss().to(self.device)
+        self.criterionGAN = GANLoss(use_lsgan=True).to(self.device)
         self.criterionFeat = torch.nn.L1Loss().to(self.device)
         self.real_label=torch.tensor(1.0)
         self.fake_label=torch.tensor(0.0)
@@ -165,11 +164,10 @@ class GANLoss(nn.Module):
         self.real_label_var = None
         self.fake_label_var = None
         self.Tensor = tensor
-        self.device = torch.device('cuda:0')
         if use_lsgan:
-            self.loss = nn.MSELoss().to(self.device)
+            self.loss = nn.MSELoss()
         else:
-            self.loss = nn.BCELoss().to(self.device)
+            self.loss = nn.BCELoss()
 
     def get_target_tensor(self, input, target_is_real):
         target_tensor = None
@@ -235,9 +233,8 @@ class Vgg19(torch.nn.Module):
 class VGGLoss(nn.Module):
     def __init__(self, gpu_ids):
         super(VGGLoss, self).__init__()       
-        self.device = torch.device('cuda:0') 
         self.vgg = Vgg19().cuda()
-        self.criterion = nn.L1Loss().to(self.device)
+        self.criterion = nn.L1Loss()
         self.weights = [1.0/32, 1.0/16, 1.0/8, 1.0/4, 1.0]        
 
     def forward(self, x, y):              
