@@ -7,7 +7,7 @@ class GlobalGenerator(nn.Module):
         self.ngf=min(ngf,maxngf)
         self.ngfm=min(ngf*2,maxngf)
         if(num_downs>1):
-            self.submodel=Unet(self.ngf,self.ngf,num_downs-1,ngf=self.ngfm,maxngf=maxngf,norm_layer=norm_layer,use_dropout=use_dropout,start_conv=False)
+            self.submodel=GlobalGenerator(self.ngf,self.ngf,num_downs-1,ngf=self.ngfm,maxngf=maxngf,norm_layer=norm_layer,use_dropout=use_dropout,start_conv=False)
         use_bias = norm_layer == nn.InstanceNorm2d
         self.start_conv=start_conv
         self.num_downs=num_downs
