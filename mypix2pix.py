@@ -23,7 +23,7 @@ class pix2pix():
         if(net_G_type=="unet"):
             self.net_G=unet.Unet(3,3,8).to(self.device)
         else:
-            self.net_G=unet.GlobalGenerator(3,3).to(self.device)
+            self.net_G=unet.GlobalGenerator(3,3,8).to(self.device)
         #self.net_D=net_D.net_D(6).to(self.device)
         self.net_D=net_D.MultiscaleDiscriminator(6, 64, 3, nn.BatchNorm2d, False, 1, True).to(self.device)
         self.init_weights()

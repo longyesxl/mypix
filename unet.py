@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-class Unet(nn.Module):
+class GlobalGenerator(nn.Module):
     def __init__(self, input_nc, output_nc, num_downs, ngf=64,maxngf=512, norm_layer=nn.BatchNorm2d, use_dropout=False,start_conv=True):
-        super(Unet, self).__init__()
+        super(GlobalGenerator, self).__init__()
         self.ngf=min(ngf,maxngf)
         self.ngfm=min(ngf*2,maxngf)
         if(num_downs>1):
@@ -63,11 +63,11 @@ class Unet(nn.Module):
                 y=self.updropout(y)
             return torch.cat([x, y], 1) 
 
-class GlobalGenerator(nn.Module):
-    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d, 
+class Unet(nn.Module):
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d, 
                  padding_type='reflect'):
         assert(n_blocks >= 0)
-        super(GlobalGenerator, self).__init__()        
+        super(Unet, self).__init__()        
         activation = nn.ReLU(True)        
 
         model = [nn.ReflectionPad2d(3), nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0), norm_layer(ngf), activation]
